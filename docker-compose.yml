@@ -16,5 +16,16 @@ services:
       timeout: 3s
       retries: 10
 
+  api:
+    build: ./backend
+    environment:
+      # Inside the compose network Postgres is "postgres:5432", not localhost:5433.
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-tracedesk}:${POSTGRES_PASSWORD:-tracedesk}@postgres:5432/${POSTGRES_DB:-tracedesk}
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
 volumes:
   pgdata:

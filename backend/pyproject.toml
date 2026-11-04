@@ -4,7 +4,11 @@ version = "0.1.0"
 description = "TraceDesk Evidence Ledger API"
 requires-python = ">=3.12,<3.13"
 dependencies = [
+    "alembic>=1.14",
+    "asyncpg>=0.30",
     "fastapi>=0.115",
+    "pydantic-settings>=2.6",
+    "sqlalchemy[asyncio]>=2.0.36",
     "uvicorn[standard]>=0.32",
 ]
 
