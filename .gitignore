@@ -1,0 +1,36 @@
+# Local Claude Code setup (kept private)
+.claude/
+CLAUDE.md
+docs/DAY*.md
+
+# Secrets
+.env
+.env.*
+!.env.example
+
+# TraceDesk runtime data
+workspaces/
+artifacts/
+reports/*
+!reports/samples/
+eval/cases/*/repo/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# OS / editors
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
