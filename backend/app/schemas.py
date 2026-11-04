@@ -1,7 +1,7 @@
 """Request (Create) and response (Read) models.
 
 Create models forbid unknown fields, so a client cannot sneak in `status`, `id` or other
-server-owned values: statuses only change through the transition endpoint (Part C).
+server-owned values: statuses only change through POST /hypotheses/{id}/transition.
 """
 
 import uuid
@@ -86,6 +86,21 @@ class HypothesisRead(ReadModel):
     created_by: str
     created_at: datetime
     updated_at: datetime
+
+
+class TransitionRequest(CreateModel):
+    to: HypothesisStatus
+    reason: NonEmptyText
+
+
+class HypothesisEventRead(ReadModel):
+    id: uuid.UUID
+    hypothesis_id: uuid.UUID
+    from_status: HypothesisStatus
+    to_status: HypothesisStatus
+    actor: str
+    reason: str
+    created_at: datetime
 
 
 class EvidenceCreate(CreateModel):

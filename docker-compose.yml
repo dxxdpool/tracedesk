@@ -21,6 +21,10 @@ services:
     environment:
       # Inside the compose network Postgres is "postgres:5432", not localhost:5433.
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-tracedesk}:${POSTGRES_PASSWORD:-tracedesk}@postgres:5432/${POSTGRES_DB:-tracedesk}
+      # Required: the API refuses to start without three distinct tokens.
+      AGENT_TOKEN: ${AGENT_TOKEN:?set AGENT_TOKEN in .env}
+      VALIDATOR_TOKEN: ${VALIDATOR_TOKEN:?set VALIDATOR_TOKEN in .env}
+      APPROVER_TOKEN: ${APPROVER_TOKEN:?set APPROVER_TOKEN in .env}
     ports:
       - "8000:8000"
     depends_on:

@@ -19,6 +19,7 @@ from app.config import settings
 from app.db import get_session
 from app.main import app
 from app.models import Base
+from app.state_machine import Role
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 TEST_DB_NAME = "tracedesk_test"
@@ -26,6 +27,16 @@ TEST_DATABASE_URL = os.environ.get("TEST_DATABASE_URL") or (
     make_url(settings.database_url).set(database=TEST_DB_NAME).render_as_string(hide_password=False)
 )
 ACTOR = "tester"
+
+
+def bearer(role: Role) -> dict[str, str]:
+    """Authorization header for a role, using the tokens the app itself loaded."""
+    token = {
+        Role.AGENT: settings.agent_token,
+        Role.VALIDATOR: settings.validator_token,
+        Role.HUMAN: settings.approver_token,
+    }[role]
+    return {"Authorization": f"Bearer {token.get_secret_value()}"}
 
 
 async def _recreate_test_database() -> None:
@@ -68,7 +79,9 @@ async def client(session_factory: async_sessionmaker[AsyncSession]) -> AsyncIter
 
     app.dependency_overrides[get_session] = override_get_session
     transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test", headers={"X-Actor": ACTOR}) as c:
+    # Default identity: an agent. Tests pass headers=bearer(Role.X) to act as another role.
+    headers = {"X-Actor": ACTOR, **bearer(Role.AGENT)}
+    async with AsyncClient(transport=transport, base_url="http://test", headers=headers) as c:
         yield c
     app.dependency_overrides.clear()
 
