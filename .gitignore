@@ -3,6 +3,14 @@
 CLAUDE.md
 docs/DAY*.md
 
+# Working notes, kept private (summarised in README later)
+docs/PROGRESS.md
+docs/SWITCH_NOTES.md
+docs/DECISIONS.md
+
+# Untested Switch template (agents were created by hand; see README)
+switch/tracedesk.template.yaml
+
 # Secrets
 .env
 .env.*
