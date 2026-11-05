@@ -31,7 +31,7 @@ async def test_create_evidence_linked_to_hypothesis(
     assert body["hypothesis_id"] == hypothesis["id"]
     assert (body["line_start"], body["line_end"]) == (10, 14)
     assert body["created_by"] == ACTOR
-    assert body["snippet"] is None  # captured server-side from the pinned commit on Day 2
+    assert body["snippet"] == "\n".join(f"# line {n}" for n in range(10, 15))  # quoted by the server
 
 
 async def test_create_observation_without_hypothesis_or_lines(

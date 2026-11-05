@@ -19,6 +19,9 @@ import httpx
 
 DEFAULT_API_URL = "http://localhost:8000"
 TIMEOUT_SECONDS = 30.0
+# Creating an investigation clones the repo, and the server allows a clone up to 120 s,
+# so waiting for a response may take longer than connecting or sending.
+READ_TIMEOUT_SECONDS = 180.0
 CONFIG_FILE_NAME = "tracedesk.env"
 FILE_KEYS = frozenset({"TRACEDESK_TOKEN", "TRACEDESK_ACTOR"})
 
@@ -66,7 +69,8 @@ def http_client_from_env() -> httpx.Client:
         "Authorization": f"Bearer {_required_setting('TRACEDESK_TOKEN', file_values)}",
         "X-Actor": _required_setting("TRACEDESK_ACTOR", file_values),
     }
-    return httpx.Client(base_url=base_url, headers=headers, timeout=TIMEOUT_SECONDS)
+    timeout = httpx.Timeout(TIMEOUT_SECONDS, read=READ_TIMEOUT_SECONDS)
+    return httpx.Client(base_url=base_url, headers=headers, timeout=timeout)
 
 
 def _validation_message(detail: Any) -> str:

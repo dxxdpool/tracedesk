@@ -199,6 +199,8 @@ class Evidence(Base):
     line_start: Mapped[int | None] = mapped_column(Integer)
     line_end: Mapped[int | None] = mapped_column(Integer)
     snippet: Mapped[str | None] = mapped_column(Text)
+    # git_history evidence: the full SHA of the cited commit (its subject line is the snippet).
+    commit_sha: Mapped[str | None] = mapped_column(String(SHA_LENGTH))
     note: Mapped[str | None] = mapped_column(Text)
     repo_sha: Mapped[str | None] = mapped_column(String(SHA_LENGTH))
     created_by: Mapped[str] = mapped_column(String(ACTOR_LENGTH))

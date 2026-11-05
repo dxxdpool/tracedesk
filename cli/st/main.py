@@ -113,15 +113,22 @@ def parse_lines(value: str) -> tuple[int, int]:
 @reports_errors
 def investigation_create(
     ctx: typer.Context,
-    repo: Annotated[str, typer.Option(help="Repository URL")],
+    repo: Annotated[str, typer.Option(help="https://github.com/<owner>/<repo>")],
     problem: Annotated[str, typer.Option(help="The bug, in the reporter's words")],
     room: Annotated[str | None, typer.Option(help="Switch room id")] = None,
     json_output: JsonFlag = False,
 ) -> None:
-    # TODO(Day 2): clone the repo into workspaces/<id>, pin repo_sha, print the workspace path.
+    """Clone the repo at its current HEAD and open an investigation pinned to that SHA."""
     body = {"repo_url": repo, "problem": problem, "switch_room_id": room}
     created = get_client().post("/investigations", body)
-    _emit(_wants_json(ctx, json_output), created, f"investigation {created['id']} created")
+    text = "\n".join(
+        [
+            f"investigation {created['id']} created",
+            f"  sha:       {created['repo_sha']}",
+            f"  workspace: {created['workspace_path']}",
+        ]
+    )
+    _emit(_wants_json(ctx, json_output), created, text)
 
 
 @investigation_app.command("show")
@@ -136,7 +143,8 @@ def investigation_show(
     hypotheses = client.get("/hypotheses", params={"investigation_id": investigation_id})
     lines = [
         f"investigation {investigation['id']}  [{investigation['status']}]",
-        f"  repo:    {investigation['repo_url']}  sha: {investigation['repo_sha'] or '(not pinned yet)'}",
+        f"  repo:    {investigation['repo_url']}  sha: {investigation['repo_sha'] or '(not pinned)'}",
+        f"  workspace: {investigation['workspace_path'] or '(none)'}",
         f"  problem: {investigation['problem']}",
         f"  hypotheses ({len(hypotheses)}):",
     ]
@@ -188,14 +196,18 @@ def hypothesis_events(
 # --- evidence --------------------------------------------------------------------------------
 
 
-def _source_for(source: EvidenceSource | None, experiment: str | None, file: str | None) -> EvidenceSource:
+def _source_for(
+    source: EvidenceSource | None, experiment: str | None, file: str | None, commit: str | None
+) -> EvidenceSource:
     if source is not None:
         return source
+    if commit is not None:
+        return EvidenceSource.GIT_HISTORY
     if experiment is not None:
         return EvidenceSource.EXPERIMENT_OUTPUT
     if file is not None:
         return EvidenceSource.CODE_REF
-    raise typer.BadParameter("pass --file, --experiment or --source", param_hint="--source")
+    raise typer.BadParameter("pass --file, --commit, --experiment or --source", param_hint="--source")
 
 
 @evidence_app.command("add")
@@ -205,24 +217,32 @@ def evidence_add(
     inv: Annotated[str, typer.Option(help="Investigation id")],
     kind: Annotated[EvidenceKind, typer.Option(help="supporting, contradicting or observation")],
     hypothesis: Annotated[str | None, typer.Option(help="Hypothesis id")] = None,
-    file: Annotated[str | None, typer.Option(help="File path inside the repo")] = None,
+    file: Annotated[str | None, typer.Option(help="File path relative to the repo root")] = None,
     lines: Annotated[str | None, typer.Option(help="Line range, e.g. 10-24")] = None,
+    commit: Annotated[str | None, typer.Option(help="Commit SHA (git_history evidence)")] = None,
     note: Annotated[str | None, typer.Option(help="What this shows")] = None,
     experiment: Annotated[str | None, typer.Option(help="Experiment id this evidence comes from")] = None,
-    source: Annotated[EvidenceSource | None, typer.Option(help="Default: from --experiment/--file")] = None,
+    source: Annotated[
+        EvidenceSource | None, typer.Option(help="Default: from --commit/--experiment/--file")
+    ] = None,
     json_output: JsonFlag = False,
 ) -> None:
-    # TODO(Day 2): the server checks the file and lines against the pinned commit.
+    """Cite code (--file + --lines) or a commit (--commit). The server checks the citation against
+    the pinned commit and quotes the code itself; a citation that does not exist is rejected."""
     body: dict[str, Any] = {
         "investigation_id": inv,
         "hypothesis_id": hypothesis,
         "experiment_id": experiment,
         "kind": kind.value,
-        "source_type": _source_for(source, experiment, file).value,
+        "source_type": _source_for(source, experiment, file, commit).value,
         "file_path": file,
+        "commit_sha": commit,
         "note": note,
     }
     if lines is not None:
         body["line_start"], body["line_end"] = parse_lines(lines)
     created = get_client().post("/evidence", body)
-    _emit(_wants_json(ctx, json_output), created, f"evidence {created['id']} added [{created['kind']}]")
+    text = f"evidence {created['id']} added [{created['kind']}]"
+    if created["snippet"] is not None:
+        text += f"\n  quoted by the server from {created['repo_sha'][:12]}:\n{created['snippet']}"
+    _emit(_wants_json(ctx, json_output), created, text)

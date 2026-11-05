@@ -25,6 +25,15 @@ services:
       AGENT_TOKEN: ${AGENT_TOKEN:?set AGENT_TOKEN in .env}
       VALIDATOR_TOKEN: ${VALIDATOR_TOKEN:?set VALIDATOR_TOKEN in .env}
       APPROVER_TOKEN: ${APPROVER_TOKEN:?set APPROVER_TOKEN in .env}
+      # Clones go to ./workspaces on the host, where agents read them and `st` mounts them into
+      # the sandbox. The API only needs to know the host path to print it.
+      WORKSPACES_DIR: /workspaces
+      WORKSPACES_HOST_DIR: ${WORKSPACES_HOST_DIR:?set WORKSPACES_HOST_DIR in .env}
+      ALLOW_LOCAL_REPOS: ${ALLOW_LOCAL_REPOS:-0}
+      LOCAL_REPOS_DIR: /cases
+    volumes:
+      - ./workspaces:/workspaces
+      - ./eval/cases:/cases:ro
     ports:
       - "8000:8000"
     depends_on:

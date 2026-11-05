@@ -15,7 +15,7 @@ async def test_create_investigation_returns_open_investigation_with_uuid(client:
     body = resp.json()
     assert uuid.UUID(body["id"])
     assert body["status"] == "open"
-    assert body["repo_sha"] is None
+    assert len(body["repo_sha"]) == 40  # pinned to the cloned HEAD
     assert body["problem"] == "totals are off by a cent"
 
 

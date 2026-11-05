@@ -30,7 +30,7 @@ async def add_evidence(client: AsyncClient, hypothesis: dict[str, Any], kind: st
             "hypothesis_id": hypothesis["id"],
             "kind": kind,
             "source_type": "code_ref",
-            "file_path": "app/pagination.py",
+            "file_path": "pkg/paginate.py",
             "line_start": 10,
             "line_end": 12,
         },

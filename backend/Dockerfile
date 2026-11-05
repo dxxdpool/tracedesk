@@ -9,6 +9,11 @@ ENV UV_COMPILE_BYTECODE=1 \
     PATH="/opt/venv/bin:$PATH" \
     PYTHONUNBUFFERED=1
 
+# git clones investigated repos. It only clones and reads; repo code never runs in this image.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends git ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
 # Dependencies first, so code changes don't reinstall them.
@@ -19,8 +24,11 @@ COPY alembic.ini ./
 COPY alembic ./alembic
 COPY app ./app
 
-RUN useradd --uid 1000 --no-create-home --shell /usr/sbin/nologin tracedesk
+RUN useradd --uid 1000 --no-create-home --shell /usr/sbin/nologin tracedesk \
+    && mkdir /workspaces && chown tracedesk /workspaces
 USER tracedesk
+# git needs a writable HOME for its own config lookups.
+ENV HOME=/tmp
 
 EXPOSE 8000
 

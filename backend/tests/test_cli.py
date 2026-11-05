@@ -18,7 +18,7 @@ from app.main import app
 from app.state_machine import Role
 from st import main as st_main
 from st.client import DEFAULT_API_URL, ApiClient, http_client_from_env
-from tests.conftest import bearer
+from tests.conftest import FixtureRepo, bearer
 
 RunSt = Callable[..., Any]
 
@@ -55,7 +55,7 @@ def test_full_flow_create_hypothesis_evidence_transition(run_st: RunSt) -> None:
     created_id(
         run_st(
             "evidence", "add", "--inv", inv, "--hypothesis", hyp, "--kind", "supporting",
-            "--file", "app/pages.py", "--lines", "10-24", "--note", "start=1", "--json",
+            "--file", "pkg/paginate.py", "--lines", "10-24", "--note", "start=1", "--json",
         )
     )  # fmt: skip
     assert run_st("hypothesis", "transition", hyp, "--to", "under_review", "--reason", "plausible").exit_code == 0
@@ -163,3 +163,46 @@ def test_environment_wins_over_config_file(clean_env: Path, monkeypatch: pytest.
 @pytest.mark.parametrize(("value", "expected"), [("10-24", (10, 24)), ("7", (7, 7))])
 def test_parse_lines(value: str, expected: tuple[int, int]) -> None:
     assert st_main.parse_lines(value) == expected
+
+
+def test_investigation_create_prints_sha_and_workspace(run_st: RunSt) -> None:
+    result = run_st("investigation", "create", "--repo", "https://github.com/example/repo", "--problem", "bug")
+
+    assert result.exit_code == 0, result.output
+    assert "sha:" in result.stdout
+    assert "workspace:" in result.stdout
+    assert "(not pinned)" not in result.stdout
+
+
+def test_fabricated_citation_rejected_with_reason(run_st: RunSt) -> None:
+    inv = created_id(run_st("investigation", "create", "--repo", "https://github.com/x/y", "--problem", "p", "--json"))
+
+    result = run_st(
+        "evidence", "add", "--inv", inv, "--kind", "supporting", "--file", "pkg/invented.py", "--lines", "1-3"
+    )
+
+    assert result.exit_code == 1
+    assert "rejected (422 file_not_found)" in result.stderr
+
+
+def test_real_citation_prints_server_quoted_snippet(run_st: RunSt) -> None:
+    inv = created_id(run_st("investigation", "create", "--repo", "https://github.com/x/y", "--problem", "p", "--json"))
+
+    result = run_st("evidence", "add", "--inv", inv, "--kind", "observation", "--file", "pkg/paginate.py", "--lines", "4")
+
+    assert result.exit_code == 0, result.output
+    assert "quoted by the server" in result.stdout
+    assert "# line 4" in result.stdout
+
+
+def test_commit_option_records_git_history(run_st: RunSt, fixture_repo: FixtureRepo) -> None:
+    inv = created_id(run_st("investigation", "create", "--repo", "https://github.com/x/y", "--problem", "p", "--json"))
+
+    result = run_st(
+        "evidence", "add", "--inv", inv, "--kind", "observation", "--commit", fixture_repo.commits[0][:8], "--json"
+    )
+
+    assert result.exit_code == 0, result.output
+    body = json.loads(result.stdout)
+    assert body["source_type"] == "git_history"
+    assert body["snippet"] == "add paginate helper"

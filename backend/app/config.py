@@ -6,7 +6,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # The repo-root .env (backend/app/config.py -> repo root). Missing in containers, where
 # compose passes the values as environment variables instead.
-ENV_FILE = Path(__file__).resolve().parents[2] / ".env"
+PROJECT_DIR = Path(__file__).resolve().parents[2]
+ENV_FILE = PROJECT_DIR / ".env"
 MIN_TOKEN_LENGTH = 16
 PLACEHOLDER_PREFIX = "change-me"
 
@@ -20,6 +21,14 @@ class Settings(BaseSettings):
     agent_token: SecretStr
     validator_token: SecretStr
     approver_token: SecretStr
+
+    # Clones live in <workspaces_dir>/<investigation_id>/repo. In compose the API sees the folder as
+    # /workspaces, so workspaces_host_dir says where agents on the host find the same folder.
+    workspaces_dir: Path = PROJECT_DIR / "workspaces"
+    workspaces_host_dir: str | None = None
+    # Eval/dev only: also accept repos under eval/cases/ instead of GitHub URLs.
+    allow_local_repos: bool = False
+    local_repos_dir: Path = PROJECT_DIR / "eval" / "cases"
 
     @field_validator("agent_token", "validator_token", "approver_token")
     @classmethod

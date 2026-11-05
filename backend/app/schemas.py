@@ -47,6 +47,7 @@ RepoUrl = text_type(URL_LENGTH)
 FilePath = text_type(PATH_LENGTH)
 RoomId = text_type(ROOM_ID_LENGTH)
 LineNumber = Annotated[int, Field(ge=1, le=MAX_POSTGRES_INT)]
+CommitId = Annotated[str, StringConstraints(strip_whitespace=True, pattern=r"^[0-9a-fA-F]{4,40}$")]
 
 
 class CreateModel(BaseModel):
@@ -71,6 +72,23 @@ class InvestigationRead(ReadModel):
     status: InvestigationStatus
     switch_room_id: str | None
     created_at: datetime
+    # Where agents on the host find the clone; filled in by the route, not stored.
+    workspace_path: str | None = None
+
+
+class RepoFiles(BaseModel):
+    repo_sha: str
+    files: list[str]
+    truncated: bool
+
+
+class RepoFileLines(BaseModel):
+    repo_sha: str
+    path: str
+    line_start: int
+    line_end: int
+    line_count: int
+    lines: list[str]
 
 
 class HypothesisCreate(CreateModel):
@@ -104,7 +122,11 @@ class HypothesisEventRead(ReadModel):
 
 
 class EvidenceCreate(CreateModel):
-    """Snippet and repo_sha are not accepted: the server captures them from the pinned commit (Day 2)."""
+    """Snippet and repo_sha are not accepted: the server captures them from the pinned commit.
+
+    Shape per source_type: code_ref needs file_path + lines; git_history needs commit_sha (file_path
+    optional, no lines); other sources carry no citation at all, so nothing unchecked looks cited.
+    """
 
     investigation_id: uuid.UUID
     hypothesis_id: uuid.UUID | None = None
@@ -114,6 +136,7 @@ class EvidenceCreate(CreateModel):
     file_path: FilePath | None = None
     line_start: LineNumber | None = None
     line_end: LineNumber | None = None
+    commit_sha: CommitId | None = None
     note: NonEmptyText | None = None
 
     @model_validator(mode="after")
@@ -122,6 +145,19 @@ class EvidenceCreate(CreateModel):
             raise ValueError("line_start and line_end must be given together")
         if self.line_start is not None and self.line_end is not None and self.line_start > self.line_end:
             raise ValueError("line_start must be <= line_end")
+        return self
+
+    @model_validator(mode="after")
+    def check_citation_shape(self) -> Self:
+        has_lines = self.line_start is not None
+        if self.source_type == EvidenceSource.CODE_REF:
+            if self.file_path is None or not has_lines or self.commit_sha is not None:
+                raise ValueError("code_ref evidence needs file_path, line_start and line_end (and no commit_sha)")
+        elif self.source_type == EvidenceSource.GIT_HISTORY:
+            if self.commit_sha is None or has_lines:
+                raise ValueError("git_history evidence needs commit_sha (file_path optional, no lines)")
+        elif self.file_path is not None or has_lines or self.commit_sha is not None:
+            raise ValueError(f"{self.source_type.value} evidence cannot cite files, lines or commits")
         return self
 
 
@@ -136,6 +172,7 @@ class EvidenceRead(ReadModel):
     line_start: int | None
     line_end: int | None
     snippet: str | None
+    commit_sha: str | None
     note: str | None
     repo_sha: str | None
     created_by: str
