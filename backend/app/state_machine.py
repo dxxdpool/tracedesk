@@ -39,13 +39,16 @@ class ExperimentFacts:
     status: ExperimentStatus
     exit_code: int | None
     outcome: ExperimentOutcome | None
+    approved_by: str | None
 
     @property
     def is_confirming(self) -> bool:
+        # approved_by: results are only accepted after approval, but the guard checks it again itself.
         return (
             self.status == ExperimentStatus.COMPLETED
             and self.exit_code is not None
             and self.outcome == ExperimentOutcome.CONFIRMS
+            and self.approved_by is not None
         )
 
 

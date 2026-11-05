@@ -31,8 +31,11 @@ services:
       WORKSPACES_HOST_DIR: ${WORKSPACES_HOST_DIR:?set WORKSPACES_HOST_DIR in .env}
       ALLOW_LOCAL_REPOS: ${ALLOW_LOCAL_REPOS:-0}
       LOCAL_REPOS_DIR: /cases
+      # Experiment logs uploaded by `st experiment run`, readable on the host under ./artifacts.
+      ARTIFACTS_DIR: /artifacts
     volumes:
       - ./workspaces:/workspaces
+      - ./artifacts:/artifacts
       - ./eval/cases:/cases:ro
     ports:
       - "8000:8000"

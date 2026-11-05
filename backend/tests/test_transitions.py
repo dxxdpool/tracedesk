@@ -46,8 +46,10 @@ async def add_experiment(
     status: ExperimentStatus,
     exit_code: int | None,
     outcome: ExperimentOutcome | None,
+    approved_by: str | None = "human",
 ) -> None:
-    """Request through the API, then set the result directly: running experiments arrives on Day 2."""
+    """Request through the API, then write the result fields directly, so the guard is tested on
+    exact rows (the full approve/run/conclude flow is tested in test_experiments.py)."""
     resp = await client.post(
         "/experiments", json={"hypothesis_id": hypothesis_id, "command": "pytest -q", "why": "reproduce"}
     )
@@ -56,7 +58,7 @@ async def add_experiment(
         await session.execute(
             update(Experiment)
             .where(Experiment.id == uuid.UUID(resp.json()["id"]))
-            .values(status=status, exit_code=exit_code, outcome=outcome)
+            .values(status=status, exit_code=exit_code, outcome=outcome, approved_by=approved_by)
         )
         await session.commit()
 
@@ -173,6 +175,19 @@ async def test_verified_rejected_with_non_confirming_experiment(
     await to_supported(client, hypothesis)
     await add_experiment(client, session_factory, hypothesis["id"], status=status, exit_code=exit_code, outcome=outcome)
     resp = await move(client, hypothesis["id"], "verified", Role.HUMAN)
+    assert resp.status_code == 409
+    assert resp.json()["reason_code"] == "no_confirming_experiment"
+
+
+async def test_verified_rejected_when_experiment_was_never_approved(
+    client: AsyncClient, session_factory: async_sessionmaker[AsyncSession], hypothesis: dict[str, Any]
+) -> None:
+    await to_supported(client, hypothesis)
+    await add_experiment(
+        client, session_factory, hypothesis["id"],
+        status=ExperimentStatus.COMPLETED, exit_code=1, outcome=ExperimentOutcome.CONFIRMS, approved_by=None,
+    )  # fmt: skip
+    resp = await move(client, hypothesis["id"], "verified", Role.VALIDATOR)
     assert resp.status_code == 409
     assert resp.json()["reason_code"] == "no_confirming_experiment"
 

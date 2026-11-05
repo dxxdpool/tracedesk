@@ -29,6 +29,8 @@ class Settings(BaseSettings):
     # Eval/dev only: also accept repos under eval/cases/ instead of GitHub URLs.
     allow_local_repos: bool = False
     local_repos_dir: Path = PROJECT_DIR / "eval" / "cases"
+    # Experiment logs: <artifacts_dir>/<investigation_id>/<experiment_id>/stdout.log and stderr.log.
+    artifacts_dir: Path = PROJECT_DIR / "artifacts"
 
     @field_validator("agent_token", "validator_token", "approver_token")
     @classmethod

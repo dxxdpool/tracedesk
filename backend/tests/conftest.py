@@ -128,12 +128,13 @@ def fixture_repo(tmp_path_factory: pytest.TempPathFactory) -> FixtureRepo:
 
 @pytest.fixture(autouse=True)
 def workspace_settings(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """Every test clones into its own temporary workspaces folder; local repos off by default."""
+    """Every test gets its own temporary workspaces and artifacts folders; local repos off by default."""
     workspaces = tmp_path / "workspaces"
     monkeypatch.setattr(settings, "workspaces_dir", workspaces)
     monkeypatch.setattr(settings, "workspaces_host_dir", None)
     monkeypatch.setattr(settings, "allow_local_repos", False)
     monkeypatch.setattr(settings, "local_repos_dir", tmp_path / "cases")
+    monkeypatch.setattr(settings, "artifacts_dir", tmp_path / "artifacts")
     return workspaces
 
 

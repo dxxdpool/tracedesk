@@ -10,7 +10,7 @@ from app.db import SessionDep
 from app.errors import ApiError
 from app.models import Investigation
 from app.routes.common import get_or_404, workspace_api_error, workspace_of
-from app.schemas import InvestigationCreate, InvestigationRead, RepoFileLines, RepoFiles
+from app.schemas import InvestigationCreate, InvestigationRead, RepoFileLines, RepoFiles, RepoTree
 from app.services import workspace
 from app.services.workspace import MAX_RANGE_LINES, BlameLine, Cloner, CommitInfo, WorkspaceError
 
@@ -93,6 +93,17 @@ async def list_repo_files(investigation_id: uuid.UUID, session: SessionDep) -> R
     except WorkspaceError as exc:
         raise workspace_api_error(exc) from exc
     return RepoFiles(repo_sha=ws.sha, files=files, truncated=truncated)
+
+
+@router.get("/{investigation_id}/tree", response_model=RepoTree)
+async def repo_tree(investigation_id: uuid.UUID, session: SessionDep) -> RepoTree:
+    """Every file at the pinned commit with its blob id; `st experiment run` checks the workspace against it."""
+    ws = workspace_of(await get_or_404(session, Investigation, investigation_id, "investigation_not_found"))
+    try:
+        entries, truncated = await asyncio.to_thread(workspace.tree_entries, ws)
+    except WorkspaceError as exc:
+        raise workspace_api_error(exc) from exc
+    return RepoTree(repo_sha=ws.sha, entries=entries, truncated=truncated)
 
 
 @router.get("/{investigation_id}/file", response_model=RepoFileLines)

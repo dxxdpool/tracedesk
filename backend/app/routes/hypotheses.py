@@ -59,17 +59,15 @@ async def get_hypothesis(hypothesis_id: uuid.UUID, session: SessionDep) -> Hypot
 async def load_transition_context(session: AsyncSession, hypothesis_id: uuid.UUID, role: Role) -> TransitionContext:
     """Gather the facts the state machine needs. Only completed experiments can confirm anything."""
     counts_query = (
-        select(Evidence.kind, func.count())
-        .where(Evidence.hypothesis_id == hypothesis_id)
-        .group_by(Evidence.kind)
+        select(Evidence.kind, func.count()).where(Evidence.hypothesis_id == hypothesis_id).group_by(Evidence.kind)
     )
     counts: dict[EvidenceKind, int] = {kind: count for kind, count in await session.execute(counts_query)}
-    experiments_query = select(Experiment.status, Experiment.exit_code, Experiment.outcome).where(
-        Experiment.hypothesis_id == hypothesis_id, Experiment.status == ExperimentStatus.COMPLETED
-    )
+    experiments_query = select(
+        Experiment.status, Experiment.exit_code, Experiment.outcome, Experiment.approved_by
+    ).where(Experiment.hypothesis_id == hypothesis_id, Experiment.status == ExperimentStatus.COMPLETED)
     experiments = tuple(
-        ExperimentFacts(status=row_status, exit_code=exit_code, outcome=outcome)
-        for row_status, exit_code, outcome in await session.execute(experiments_query)
+        ExperimentFacts(status=row_status, exit_code=exit_code, outcome=outcome, approved_by=approved_by)
+        for row_status, exit_code, outcome, approved_by in await session.execute(experiments_query)
     )
     return TransitionContext(
         supporting_count=counts.get(EvidenceKind.SUPPORTING, 0),

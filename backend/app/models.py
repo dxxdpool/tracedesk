@@ -69,6 +69,13 @@ class ExperimentStatus(StrEnum):
     TIMED_OUT = "timed_out"
 
 
+# A result has been uploaded. 'completed' means the command ran to the end, whatever its exit code
+# (a failing test is often exactly what confirms a bug); 'failed' means the sandbox could not run it.
+FINISHED_EXPERIMENT_STATUSES = frozenset(
+    {ExperimentStatus.COMPLETED, ExperimentStatus.FAILED, ExperimentStatus.TIMED_OUT}
+)
+
+
 class ExperimentOutcome(StrEnum):
     CONFIRMS = "confirms"
     REFUTES = "refutes"
@@ -176,6 +183,7 @@ class Experiment(Base):
     stderr_path: Mapped[str | None] = mapped_column(String(PATH_LENGTH))
     duration_ms: Mapped[int | None] = mapped_column(Integer)
     requested_by: Mapped[str] = mapped_column(String(ACTOR_LENGTH))
+    # The human who decided: set on approval, and on rejection too, so every decision has a name.
     approved_by: Mapped[str | None] = mapped_column(String(ACTOR_LENGTH))
     created_at: Mapped[datetime] = created_at()
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

@@ -11,6 +11,7 @@ from typing import Annotated, Any, Self
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
 from app.models import (
+    FINISHED_EXPERIMENT_STATUSES,
     PATH_LENGTH,
     URL_LENGTH,
     EvidenceKind,
@@ -79,6 +80,20 @@ class InvestigationRead(ReadModel):
 class RepoFiles(BaseModel):
     repo_sha: str
     files: list[str]
+    truncated: bool
+
+
+class RepoTreeEntry(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    path: str
+    mode: str
+    blob: str
+
+
+class RepoTree(BaseModel):
+    repo_sha: str
+    entries: list[RepoTreeEntry]
     truncated: bool
 
 
@@ -185,6 +200,33 @@ class ExperimentCreate(CreateModel):
     hypothesis_id: uuid.UUID
     command: NonEmptyText
     why: NonEmptyText
+
+
+# The runner keeps 64 KB per stream and appends a truncation marker; this leaves room for it.
+MAX_LOG_CHARS = 70_000
+LogText = Annotated[str, StringConstraints(max_length=MAX_LOG_CHARS)]
+
+
+class ExperimentResult(CreateModel):
+    """Uploaded by `st experiment run` after the sandbox finishes."""
+
+    status: ExperimentStatus
+    exit_code: Annotated[int, Field(ge=-MAX_POSTGRES_INT, le=MAX_POSTGRES_INT)] | None = None
+    duration_ms: Annotated[int, Field(ge=0, le=MAX_POSTGRES_INT)]
+    stdout: LogText = ""
+    stderr: LogText = ""
+
+    @model_validator(mode="after")
+    def check_status(self) -> Self:
+        if self.status not in FINISHED_EXPERIMENT_STATUSES:
+            raise ValueError("status must be completed, failed or timed_out")
+        if self.status == ExperimentStatus.COMPLETED and self.exit_code is None:
+            raise ValueError("a completed experiment needs its exit_code")
+        return self
+
+
+class ExperimentConclusion(CreateModel):
+    outcome: ExperimentOutcome
 
 
 class ExperimentRead(ReadModel):

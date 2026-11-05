@@ -15,7 +15,9 @@ from app.state_machine import (
 
 S = HypothesisStatus
 
-CONFIRMING = ExperimentFacts(status=ExperimentStatus.COMPLETED, exit_code=1, outcome=ExperimentOutcome.CONFIRMS)
+CONFIRMING = ExperimentFacts(
+    status=ExperimentStatus.COMPLETED, exit_code=1, outcome=ExperimentOutcome.CONFIRMS, approved_by="human"
+)
 
 # A context that satisfies every guard, so only the (from, to) table decides.
 FULL_CONTEXT = TransitionContext(
@@ -123,14 +125,21 @@ def test_verified_allowed_for_validator_and_human(role: Role) -> None:
     "experiment",
     [
         pytest.param(
-            ExperimentFacts(ExperimentStatus.COMPLETED, 0, ExperimentOutcome.INCONCLUSIVE), id="inconclusive"
+            ExperimentFacts(ExperimentStatus.COMPLETED, 0, ExperimentOutcome.INCONCLUSIVE, "human"), id="inconclusive"
         ),
-        pytest.param(ExperimentFacts(ExperimentStatus.COMPLETED, 0, ExperimentOutcome.REFUTES), id="refutes"),
-        pytest.param(ExperimentFacts(ExperimentStatus.COMPLETED, 0, None), id="no-outcome"),
-        pytest.param(ExperimentFacts(ExperimentStatus.COMPLETED, None, ExperimentOutcome.CONFIRMS), id="no-exit-code"),
-        pytest.param(ExperimentFacts(ExperimentStatus.FAILED, 1, ExperimentOutcome.CONFIRMS), id="failed"),
-        pytest.param(ExperimentFacts(ExperimentStatus.TIMED_OUT, 1, ExperimentOutcome.CONFIRMS), id="timed-out"),
-        pytest.param(ExperimentFacts(ExperimentStatus.APPROVED, None, None), id="not-run"),
+        pytest.param(ExperimentFacts(ExperimentStatus.COMPLETED, 0, ExperimentOutcome.REFUTES, "human"), id="refutes"),
+        pytest.param(ExperimentFacts(ExperimentStatus.COMPLETED, 0, None, "human"), id="no-outcome"),
+        pytest.param(
+            ExperimentFacts(ExperimentStatus.COMPLETED, None, ExperimentOutcome.CONFIRMS, "human"), id="no-exit-code"
+        ),
+        pytest.param(ExperimentFacts(ExperimentStatus.FAILED, 1, ExperimentOutcome.CONFIRMS, "human"), id="failed"),
+        pytest.param(
+            ExperimentFacts(ExperimentStatus.TIMED_OUT, 1, ExperimentOutcome.CONFIRMS, "human"), id="timed-out"
+        ),
+        pytest.param(ExperimentFacts(ExperimentStatus.APPROVED, None, None, "human"), id="not-run"),
+        pytest.param(
+            ExperimentFacts(ExperimentStatus.COMPLETED, 1, ExperimentOutcome.CONFIRMS, None), id="never-approved"
+        ),
     ],
 )
 def test_verified_rejected_without_completed_confirming_experiment(experiment: ExperimentFacts) -> None:
@@ -141,13 +150,13 @@ def test_verified_rejected_without_completed_confirming_experiment(experiment: E
 
 
 def test_one_confirming_experiment_among_others_is_enough() -> None:
-    others = (ExperimentFacts(ExperimentStatus.COMPLETED, 0, ExperimentOutcome.REFUTES), CONFIRMING)
+    others = (ExperimentFacts(ExperimentStatus.COMPLETED, 0, ExperimentOutcome.REFUTES, "human"), CONFIRMING)
     ctx = TransitionContext(supporting_count=0, contradicting_count=0, experiments=others, actor_role=Role.VALIDATOR)
     assert can_transition(S.SUPPORTED, S.VERIFIED, ctx).ok
 
 
 def test_exit_code_zero_counts_as_set() -> None:
-    passing = ExperimentFacts(ExperimentStatus.COMPLETED, 0, ExperimentOutcome.CONFIRMS)
+    passing = ExperimentFacts(ExperimentStatus.COMPLETED, 0, ExperimentOutcome.CONFIRMS, "human")
     ctx = TransitionContext(supporting_count=0, contradicting_count=0, experiments=(passing,), actor_role=Role.HUMAN)
     assert can_transition(S.SUPPORTED, S.VERIFIED, ctx).ok
 

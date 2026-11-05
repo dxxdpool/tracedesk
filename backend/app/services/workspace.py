@@ -25,6 +25,7 @@ GIT_TIMEOUT_SECONDS = 15
 MAX_FILE_BYTES = 2 * 1024 * 1024
 MAX_RANGE_LINES = 200
 MAX_LISTED_FILES = 5000
+MAX_TREE_ENTRIES = 20_000
 MAX_LOG_ENTRIES = 50
 MAX_ERROR_CHARS = 500
 
@@ -43,6 +44,7 @@ PERSISTED_GIT_CONFIG = {
     "core.hooksPath": os.devnull,
     "core.fsmonitor": "false",
     "core.symlinks": "false",  # symlinks become plain files, so nothing in the checkout points outside it
+    "core.autocrlf": "false",  # files are written byte for byte as committed, so their hashes match the tree
     "protocol.allow": "never",  # a clone never fetches again
 }
 # Applied to every git call as well (the clone itself re-allows exactly one protocol).
@@ -334,6 +336,30 @@ def read_lines(ws: Workspace, raw_path: str, start: int, end: int) -> tuple[str,
     relative, lines = read_file(ws, raw_path)
     check_range(relative, len(lines), start, end)
     return relative, lines[start - 1 : end]
+
+
+@dataclass(frozen=True)
+class TreeEntry:
+    path: str
+    mode: str
+    blob: str
+
+
+def tree_entries(ws: Workspace) -> tuple[list[TreeEntry], bool]:
+    """(every file at the pinned commit with its git blob id, truncated?).
+
+    `st experiment run` hashes the workspace against this list, so it can prove the files it mounts
+    into the sandbox are the pinned commit without running git on the host.
+    """
+    _check_workspace(ws)
+    output = _git(ws.repo_dir, "ls-tree", "-r", "-z", ws.sha).decode(errors="replace")
+    entries: list[TreeEntry] = []
+    for record in filter(None, output.split("\x00")):
+        meta, _, path = record.partition("\t")
+        mode, kind, object_id = meta.split(" ")
+        if kind == "blob":  # submodules ("commit" entries) are not checked out
+            entries.append(TreeEntry(path=path, mode=mode, blob=object_id))
+    return entries[:MAX_TREE_ENTRIES], len(entries) > MAX_TREE_ENTRIES
 
 
 def list_files(ws: Workspace) -> tuple[list[str], bool]:

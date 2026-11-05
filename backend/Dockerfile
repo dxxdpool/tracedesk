@@ -12,7 +12,10 @@ ENV UV_COMPILE_BYTECODE=1 \
 # git clones investigated repos. It only clones and reads; repo code never runs in this image.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends git ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    # Local eval repos (mounted at /cases) belong to the host user. Cloning them starts git-upload-pack
+    # with `-c` options cleared, so the ownership exception must live in the system config.
+    && git config --system --add safe.directory '/cases/*'
 
 WORKDIR /app
 
@@ -25,7 +28,7 @@ COPY alembic ./alembic
 COPY app ./app
 
 RUN useradd --uid 1000 --no-create-home --shell /usr/sbin/nologin tracedesk \
-    && mkdir /workspaces && chown tracedesk /workspaces
+    && mkdir /workspaces /artifacts && chown tracedesk /workspaces /artifacts
 USER tracedesk
 # git needs a writable HOME for its own config lookups.
 ENV HOME=/tmp

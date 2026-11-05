@@ -10,19 +10,23 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from enum import StrEnum
 from functools import wraps
+from pathlib import Path
 from typing import Annotated, Any
 
 import typer
 
+from st import sandbox
 from st.client import ApiClient, CliError, http_client_from_env
 
 app = typer.Typer(no_args_is_help=True, help="TraceDesk Evidence Ledger CLI")
 investigation_app = typer.Typer(no_args_is_help=True, help="Create and show investigations")
 hypothesis_app = typer.Typer(no_args_is_help=True, help="Add hypotheses and move them through the state machine")
 evidence_app = typer.Typer(no_args_is_help=True, help="Attach evidence to an investigation or hypothesis")
+experiment_app = typer.Typer(no_args_is_help=True, help="Request, run and conclude sandbox experiments")
 app.add_typer(investigation_app, name="investigation")
 app.add_typer(hypothesis_app, name="hypothesis")
 app.add_typer(evidence_app, name="evidence")
+app.add_typer(experiment_app, name="experiment")
 
 
 def get_client() -> ApiClient:
@@ -51,6 +55,12 @@ class EvidenceSource(StrEnum):
     GIT_HISTORY = "git_history"
     EXPERIMENT_OUTPUT = "experiment_output"
     HUMAN_NOTE = "human_note"
+
+
+class ExperimentOutcome(StrEnum):
+    CONFIRMS = "confirms"
+    REFUTES = "refutes"
+    INCONCLUSIVE = "inconclusive"
 
 
 @dataclass(frozen=True)
@@ -189,7 +199,9 @@ def hypothesis_events(
     json_output: JsonFlag = False,
 ) -> None:
     events = get_client().get(f"/hypotheses/{hypothesis_id}/events")
-    lines = [f"{e['created_at']}  {e['from_status']} -> {e['to_status']}  by {e['actor']}: {e['reason']}" for e in events]
+    lines = [
+        f"{e['created_at']}  {e['from_status']} -> {e['to_status']}  by {e['actor']}: {e['reason']}" for e in events
+    ]
     _emit(_wants_json(ctx, json_output), events, "\n".join(lines) or "no transitions yet")
 
 
@@ -222,9 +234,7 @@ def evidence_add(
     commit: Annotated[str | None, typer.Option(help="Commit SHA (git_history evidence)")] = None,
     note: Annotated[str | None, typer.Option(help="What this shows")] = None,
     experiment: Annotated[str | None, typer.Option(help="Experiment id this evidence comes from")] = None,
-    source: Annotated[
-        EvidenceSource | None, typer.Option(help="Default: from --commit/--experiment/--file")
-    ] = None,
+    source: Annotated[EvidenceSource | None, typer.Option(help="Default: from --commit/--experiment/--file")] = None,
     json_output: JsonFlag = False,
 ) -> None:
     """Cite code (--file + --lines) or a commit (--commit). The server checks the citation against
@@ -246,3 +256,141 @@ def evidence_add(
     if created["snippet"] is not None:
         text += f"\n  quoted by the server from {created['repo_sha'][:12]}:\n{created['snippet']}"
     _emit(_wants_json(ctx, json_output), created, text)
+
+
+# --- experiments -----------------------------------------------------------------------------
+
+OUTPUT_TAIL_LINES = 40
+ExperimentArg = Annotated[str, typer.Argument(metavar="E", help="Experiment id")]
+
+
+def _describe(experiment: dict[str, Any]) -> str:
+    return "\n".join(
+        [
+            f"experiment {experiment['id']}  [{experiment['status']}]",
+            f"  hypothesis: {experiment['hypothesis_id']}",
+            f"  requested by: {experiment['requested_by']}",
+            f"  why:     {experiment['why']}",
+            f"  command: {experiment['command']}",
+        ]
+    )
+
+
+def _tail(text: str) -> str:
+    return "\n".join(text.rstrip().splitlines()[-OUTPUT_TAIL_LINES:])
+
+
+@experiment_app.command("request")
+@reports_errors
+def experiment_request(
+    ctx: typer.Context,
+    hypothesis: Annotated[str, typer.Option(help="Hypothesis id the experiment tests")],
+    command: Annotated[str, typer.Option(help="Shell command run in the repo root inside the sandbox")],
+    why: Annotated[str, typer.Option(help="What the result will show")],
+    json_output: JsonFlag = False,
+) -> None:
+    """Ask to run a command. Nothing runs until a human approves it with `st approve`."""
+    created = get_client().post("/experiments", {"hypothesis_id": hypothesis, "command": command, "why": why})
+    text = f"{_describe(created)}\n  waiting for a human: st approve {created['id']}"
+    _emit(_wants_json(ctx, json_output), created, text)
+
+
+@experiment_app.command("show")
+@reports_errors
+def experiment_show(ctx: typer.Context, experiment_id: ExperimentArg, json_output: JsonFlag = False) -> None:
+    """Show an experiment: command, status, result, approver and outcome."""
+    experiment = get_client().get(f"/experiments/{experiment_id}")
+    lines = [_describe(experiment)]
+    if experiment["exit_code"] is not None or experiment["duration_ms"] is not None:
+        lines.append(f"  exit code: {experiment['exit_code']}  duration: {experiment['duration_ms']} ms")
+        lines.append(f"  logs: {experiment['stdout_path']}  {experiment['stderr_path']}")
+    lines.append(f"  approved by: {experiment['approved_by'] or '-'}  outcome: {experiment['outcome'] or '-'}")
+    _emit(_wants_json(ctx, json_output), experiment, "\n".join(lines))
+
+
+@app.command("approve")
+@reports_errors
+def approve(
+    ctx: typer.Context,
+    experiment_id: ExperimentArg,
+    yes: Annotated[bool, typer.Option("--yes", help="Skip the confirmation prompt")] = False,
+    json_output: JsonFlag = False,
+) -> None:
+    """Human only (approver token): show the exact command, confirm, then approve it."""
+    client = get_client()
+    experiment = client.get(f"/experiments/{experiment_id}")
+    if experiment["status"] != "requested":
+        raise CliError("experiment_not_requested", f"Experiment is already '{experiment['status']}'")
+    typer.echo(_describe(experiment), err=True)
+    if not yes and not typer.confirm("Approve running exactly this command in the sandbox?", err=True):
+        raise CliError("not_approved", "Nothing was approved")
+    approved = client.post(f"/experiments/{experiment_id}/approve", {})
+    _emit(_wants_json(ctx, json_output), approved, f"experiment {approved['id']} approved by {approved['approved_by']}")
+
+
+@app.command("reject")
+@reports_errors
+def reject(ctx: typer.Context, experiment_id: ExperimentArg, json_output: JsonFlag = False) -> None:
+    """Human only (approver token): refuse to run the experiment."""
+    rejected = get_client().post(f"/experiments/{experiment_id}/reject", {})
+    _emit(_wants_json(ctx, json_output), rejected, f"experiment {rejected['id']} rejected by {rejected['approved_by']}")
+
+
+@experiment_app.command("run")
+@reports_errors
+def experiment_run(
+    ctx: typer.Context,
+    experiment_id: ExperimentArg,
+    timeout: Annotated[
+        int, typer.Option(min=1, max=sandbox.MAX_TIMEOUT_SECONDS, help="Wall-clock limit in seconds")
+    ] = sandbox.DEFAULT_TIMEOUT_SECONDS,
+    json_output: JsonFlag = False,
+) -> None:
+    """Run an approved experiment in the sandbox on this machine and upload the result."""
+    client = get_client()
+    experiment = client.get(f"/experiments/{experiment_id}")
+    if experiment["status"] != "approved":
+        raise CliError(
+            "experiment_not_approved",
+            f"Experiment is '{experiment['status']}'; it runs only after a human approves it "
+            f"(st approve {experiment['id']})",
+        )
+    investigation = client.get(f"/investigations/{experiment['investigation_id']}")
+    if not investigation["workspace_path"] or not investigation["repo_sha"]:
+        raise CliError("investigation_not_pinned", "The investigation has no cloned repo at a pinned SHA")
+    tree = client.get(f"/investigations/{investigation['id']}/tree")
+    if tree["truncated"]:
+        raise CliError("repo_too_many_files", "The pinned tree is too large to verify before a run")
+    repo_dir = Path(investigation["workspace_path"])
+    typer.echo(
+        f"checking the workspace, then running in the sandbox (limit {timeout}s): {experiment['command']}", err=True
+    )
+    result = sandbox.run_pinned(experiment["id"], repo_dir, tree["entries"], experiment["command"], timeout)
+    if result.status == sandbox.STATUS_FAILED:
+        # Docker itself could not start it (no image, name already in use by a run in progress, ...).
+        # Nothing is uploaded, so the approval is not used up by a broken setup.
+        raise CliError("sandbox_failed", f"The sandbox did not start: {_tail(result.stderr) or 'no details'}")
+    stored = client.post(f"/experiments/{experiment['id']}/result", result.as_payload())
+    lines = [
+        f"experiment {stored['id']} [{stored['status']}] exit code {stored['exit_code']} in {stored['duration_ms']} ms",
+        f"  logs: {stored['stdout_path']}  {stored['stderr_path']}",
+        f"--- stdout (last {OUTPUT_TAIL_LINES} lines) ---",
+        _tail(result.stdout) or "(empty)",
+    ]
+    if result.stderr.strip():
+        lines += [f"--- stderr (last {OUTPUT_TAIL_LINES} lines) ---", _tail(result.stderr)]
+    lines.append(f"next: st experiment conclude {stored['id']} --outcome confirms|refutes|inconclusive")
+    _emit(_wants_json(ctx, json_output), stored, "\n".join(lines))
+
+
+@experiment_app.command("conclude")
+@reports_errors
+def experiment_conclude(
+    ctx: typer.Context,
+    experiment_id: ExperimentArg,
+    outcome: Annotated[ExperimentOutcome, typer.Option(help="confirms, refutes or inconclusive")],
+    json_output: JsonFlag = False,
+) -> None:
+    """Record what the result means for the hypothesis (once)."""
+    concluded = get_client().post(f"/experiments/{experiment_id}/conclude", {"outcome": outcome.value})
+    _emit(_wants_json(ctx, json_output), concluded, f"experiment {concluded['id']} concluded: {concluded['outcome']}")
