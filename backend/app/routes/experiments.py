@@ -10,6 +10,7 @@ same experiment run one after the other and the second one is refused.
 
 import asyncio
 import uuid
+from collections.abc import Sequence
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, status
@@ -32,7 +33,7 @@ from app.models import (
     Hypothesis,
     Investigation,
 )
-from app.routes.common import get_or_404
+from app.routes.common import DEFAULT_PAGE_SIZE, Limit, Offset, get_or_404
 from app.schemas import ExperimentConclusion, ExperimentCreate, ExperimentRead, ExperimentResult
 from app.services.artifacts import log_excerpt, write_logs
 from app.state_machine import VERIFY_ROLES, Role
@@ -55,6 +56,21 @@ async def request_experiment(body: ExperimentCreate, session: SessionDep, actor:
     await session.commit()
     await session.refresh(experiment)
     return experiment
+
+
+@router.get("", response_model=list[ExperimentRead])
+async def list_experiments(
+    investigation_id: uuid.UUID, session: SessionDep, limit: Limit = DEFAULT_PAGE_SIZE, offset: Offset = 0
+) -> Sequence[Experiment]:
+    await get_or_404(session, Investigation, investigation_id, "investigation_not_found")
+    query = (
+        select(Experiment)
+        .where(Experiment.investigation_id == investigation_id)
+        .order_by(Experiment.created_at, Experiment.id)
+        .limit(limit)
+        .offset(offset)
+    )
+    return (await session.scalars(query)).all()
 
 
 @router.get("/{experiment_id}", response_model=ExperimentRead)

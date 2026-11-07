@@ -80,6 +80,18 @@ async def test_create_experiment_for_unknown_hypothesis_returns_404(client: Asyn
     assert resp.json()["reason_code"] == "hypothesis_not_found"
 
 
+async def test_list_experiments_of_an_investigation(client: AsyncClient, hypothesis: dict[str, Any]) -> None:
+    first = (await client.post("/experiments", json=experiment_request(hypothesis["id"]))).json()
+    second = (await client.post("/experiments", json=experiment_request(hypothesis["id"], command="pytest -q"))).json()
+
+    resp = await client.get("/experiments", params={"investigation_id": hypothesis["investigation_id"]})
+    other = await client.get("/experiments", params={"investigation_id": str(uuid.uuid4())})
+
+    assert resp.status_code == 200
+    assert [x["id"] for x in resp.json()] == [first["id"], second["id"]]
+    assert other.status_code == 404
+
+
 async def test_get_unknown_experiment_returns_404(client: AsyncClient) -> None:
     resp = await client.get(f"/experiments/{uuid.uuid4()}")
 

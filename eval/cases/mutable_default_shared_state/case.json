@@ -1,0 +1,7 @@
+{
+  "commits": [
+    {"snapshot": "history/01", "message": "add carts and pricing"},
+    {"snapshot": "history/02", "message": "add receipt lines"},
+    {"snapshot": "history/03", "message": "refactor: simplify cart defaults and discount math"}
+  ]
+}

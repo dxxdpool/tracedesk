@@ -1,0 +1,16 @@
+{
+  "file": "cart/cart.py",
+  "function": "new_cart",
+  "line_range": [4, 6],
+  "introducing_commit_subject": "refactor: simplify cart defaults and discount math",
+  "failing_tests": [
+    "tests/test_cart.py::test_new_carts_start_empty",
+    "tests/test_cart.py::test_total_in_cents"
+  ],
+  "decoy": {
+    "file": "cart/pricing.py",
+    "function": "discounted",
+    "line_range": [10, 14],
+    "why_it_is_not_the_cause": "total - ceil(total * percent / 100) equals floor(total * (100 - percent) / 100) for every integer input; test_discount_rounds_down still passes."
+  }
+}

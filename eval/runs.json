@@ -1,0 +1,17 @@
+{
+  "model": "Switch + OpenCode, opencode/deepseek-v4.1-flash-free (Investigator, Skeptic, Validator)",
+  "runs": [
+    {
+      "case": "pagination_off_by_one",
+      "investigation_id": "36a02742-7aa2-42a5-9165-0edd4c1c95c4",
+      "room": "tracedesk",
+      "note": "Investigator and Skeptic finished in about 3 minutes; the Validator then waited about 21 hours for OpenCode's free usage limit to reset, so the time to verdict is mostly that wait."
+    },
+    {
+      "case": "mutable_default_shared_state",
+      "investigation_id": "319fcbc4-81f5-4d2d-8ba5-a47171790a46",
+      "room": "tracedesk",
+      "note": "Uninterrupted run, including the human approval. The Investigator also proposed caller-list aliasing at the same lines; the Skeptic contradicted it because the failing call passes no list."
+    }
+  ]
+}

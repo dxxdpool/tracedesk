@@ -45,3 +45,26 @@ by three different agents.
 - `st approve` with an agent token: `rejected (403 role_not_allowed): Only the human approver can approve or reject experiments`
 - `verified` by the Investigator after a confirming run: `rejected (409 role_not_allowed): Only the validator or a human can mark a hypothesis verified`
 - A planted `conftest.py` in the workspace: `rejected (workspace_dirty): The workspace differs from the pinned commit: added conftest.py`
+
+## Run 2 — seed bug `mutable_default_shared_state` (2026-11-07, room `tracedesk`)
+
+Investigation `319fcbc4-81f5-4d2d-8ba5-a47171790a46`, pinned at `1eea0537a463`. The run took 5 min 28 s,
+from creating the investigation to `verified`, including the human approval.
+
+**The Investigator** proposed three hypotheses:
+1. The mutable default `items=[]` (`cart/cart.py:4-6`, plus the introducing commit).
+2. Carts aliasing a list the caller passes in.
+3. The decoy: the rewritten discount formula (`cart/pricing.py:10-14`).
+
+**The Skeptic** rejected two of them for precise reasons:
+- Aliasing: "The failing path calls new_cart('ben') with no items argument, so there is no caller-supplied list."
+- The decoy: "total - (total*percent+99)//100 == total - ceil(total*percent/100) == floor(total*(100-percent)/100)".
+
+It supported the mutable default with a worked input.
+
+**The Validator** predicted the result, waited for approval, ran `python -m pytest -q tests/test_cart.py::test_new_carts_start_empty`,
+saw `assert [('apple', 2)] == []` and verified the hypothesis.
+
+**Detour before the run:** the agents' `tracedesk.env` files had been overwritten with an OpenCode API key, so `st` got
+`401 token_invalid`. The Investigator reported it in the room and stopped instead of working around it, as its
+prompt says. Once the tokens were restored, it started cleanly.
