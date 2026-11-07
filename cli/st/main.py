@@ -6,6 +6,7 @@ sees exactly why (for example `no_confirming_experiment`).
 """
 
 import json
+import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
 from enum import StrEnum
@@ -256,6 +257,72 @@ def evidence_add(
     if created["snippet"] is not None:
         text += f"\n  quoted by the server from {created['repo_sha'][:12]}:\n{created['snippet']}"
     _emit(_wants_json(ctx, json_output), created, text)
+
+
+SNIPPET_PREVIEW_LINES = 3
+
+
+def _cited(evidence: dict[str, Any]) -> str:
+    if evidence["line_start"] is not None:
+        return f"{evidence['file_path']}:{evidence['line_start']}-{evidence['line_end']}"
+    if evidence["commit_sha"] is not None:
+        return f"commit {evidence['commit_sha'][:12]}" + (
+            f" ({evidence['file_path']})" if evidence["file_path"] else ""
+        )
+    if evidence["experiment_id"] is not None:
+        return f"experiment {evidence['experiment_id']}"
+    return evidence["source_type"]
+
+
+def _describe_evidence(evidence: dict[str, Any]) -> list[str]:
+    lines = [
+        f"{evidence['id']}  [{evidence['kind']}]  {_cited(evidence)}  by {evidence['created_by']}",
+        f"    hypothesis: {evidence['hypothesis_id'] or '-'}",
+    ]
+    if evidence["note"]:
+        lines.append(f"    note: {evidence['note']}")
+    if evidence["snippet"]:
+        preview = evidence["snippet"].splitlines()[-SNIPPET_PREVIEW_LINES:]
+        lines += [f"    | {line}" for line in preview]
+    return lines
+
+
+@evidence_app.command("list")
+@reports_errors
+def evidence_list(
+    ctx: typer.Context,
+    inv: Annotated[str, typer.Option(help="Investigation id")],
+    hypothesis: Annotated[str | None, typer.Option(help="Only evidence for this hypothesis")] = None,
+    json_output: JsonFlag = False,
+) -> None:
+    """Every evidence row of an investigation (or one hypothesis), with what it cites."""
+    params = {"investigation_id": inv} | ({"hypothesis_id": hypothesis} if hypothesis else {})
+    rows = get_client().get("/evidence", params=params)
+    text = "\n".join(line for row in rows for line in _describe_evidence(row)) or "no evidence yet"
+    _emit(_wants_json(ctx, json_output), rows, text)
+
+
+# --- report ----------------------------------------------------------------------------------
+
+
+@app.command("report")
+@reports_errors
+def report(
+    ctx: typer.Context,
+    investigation_id: Annotated[str, typer.Argument(metavar="ID", help="Investigation id")],
+    out: Annotated[Path | None, typer.Option(help="Where to write it (default: reports/<id>.md)")] = None,
+    json_output: JsonFlag = False,
+) -> None:
+    """Write the investigation's Markdown report, built by the server from the ledger."""
+    try:
+        canonical = str(uuid.UUID(investigation_id))  # the id becomes a file name, so it must be a real UUID
+    except ValueError as exc:
+        raise typer.BadParameter("must be an investigation id (a UUID)", param_hint="ID") from exc
+    markdown = get_client().get_text(f"/investigations/{canonical}/report")
+    target = out or Path("reports") / f"{canonical}.md"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(markdown, encoding="utf-8")
+    _emit(_wants_json(ctx, json_output), {"path": str(target)}, f"report written to {target}")
 
 
 # --- experiments -----------------------------------------------------------------------------

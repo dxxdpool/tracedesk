@@ -100,17 +100,25 @@ class ApiClient:
     def __init__(self, http: httpx.Client) -> None:
         self._http = http
 
-    def request(self, method: str, path: str, *, json: Any = None, params: dict[str, str] | None = None) -> Any:
+    def _send(
+        self, method: str, path: str, *, json: Any = None, params: dict[str, str] | None = None
+    ) -> httpx.Response:
         try:
             resp = self._http.request(method, path, json=json, params=params)
         except httpx.HTTPError as exc:
             raise CliError("api_unreachable", f"Cannot reach the API at {self._http.base_url}: {exc}") from exc
         if resp.is_error:
             raise _rejection(resp)
-        return resp.json()
+        return resp
+
+    def request(self, method: str, path: str, *, json: Any = None, params: dict[str, str] | None = None) -> Any:
+        return self._send(method, path, json=json, params=params).json()
 
     def get(self, path: str, params: dict[str, str] | None = None) -> Any:
         return self.request("GET", path, params=params)
+
+    def get_text(self, path: str) -> str:
+        return self._send("GET", path).text
 
     def post(self, path: str, json: Any) -> Any:
         return self.request("POST", path, json=json)

@@ -1,0 +1,16 @@
+{
+  "file": "shelf/paginate.py",
+  "function": "page_offset",
+  "line_range": [11, 13],
+  "introducing_commit_subject": "refactor: compute page offsets in one place",
+  "failing_tests": [
+    "tests/test_catalog.py::test_first_page_starts_with_first_title",
+    "tests/test_catalog.py::test_last_page_has_remaining_titles"
+  ],
+  "decoy": {
+    "file": "shelf/paginate.py",
+    "function": "page_count",
+    "line_range": [4, 8],
+    "why_it_is_not_the_cause": "-(-total // per_page) is ceiling division, the same result as the old (total + per_page - 1) // per_page; test_page_count_rounds_up still passes."
+  }
+}

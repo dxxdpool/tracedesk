@@ -2,7 +2,7 @@ from fastapi import Depends, FastAPI
 
 from app.auth import get_role
 from app.errors import ApiError, api_error_handler, unexpected_error_handler
-from app.routes import evidence, experiments, hypotheses, investigations
+from app.routes import evidence, experiments, hypotheses, investigations, reports
 
 
 def create_app() -> FastAPI:
@@ -15,7 +15,7 @@ def create_app() -> FastAPI:
         return {"status": "ok"}
 
     # Every ledger route needs a valid bearer token; /health stays open for compose checks.
-    for module in (investigations, hypotheses, evidence, experiments):
+    for module in (investigations, hypotheses, evidence, experiments, reports):
         app.include_router(module.router, dependencies=[Depends(get_role)])
 
     return app

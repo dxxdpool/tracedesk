@@ -380,6 +380,25 @@ def test_docker_failure_is_not_uploaded(run_st: RunSt, fake_sandbox: FakeSandbox
     assert json.loads(shown.stdout)["status"] == "approved"  # the approval is not used up
 
 
+def test_evidence_list_shows_citations_per_hypothesis(run_st: RunSt) -> None:
+    inv, hyp, _exp = requested_experiment(run_st)
+    other = created_id(run_st("hypothesis", "add", "--inv", inv, "--text", "decoy", "--json"))
+    run_st("evidence", "add", "--inv", inv, "--hypothesis", hyp, "--kind", "supporting",
+           "--file", "pkg/paginate.py", "--lines", "3-4", "--note", "start index")  # fmt: skip
+    run_st("evidence", "add", "--inv", inv, "--hypothesis", other, "--kind", "contradicting",
+           "--file", "README.md", "--lines", "1", "--note", "unrelated")  # fmt: skip
+
+    everything = run_st("evidence", "list", "--inv", inv)
+    only_hyp = run_st("evidence", "list", "--inv", inv, "--hypothesis", hyp)
+
+    assert everything.exit_code == 0, everything.output
+    assert "[supporting]  pkg/paginate.py:3-4  by investigator" in everything.stdout
+    assert "[contradicting]  README.md:1-1" in everything.stdout
+    assert "| # line 4" in everything.stdout
+    assert "README.md" not in only_hyp.stdout
+    assert "note: start index" in only_hyp.stdout
+
+
 def test_run_timeout_is_bounded(run_st: RunSt) -> None:
     result = run_st("experiment", "run", "e", "--timeout", "9999")
 

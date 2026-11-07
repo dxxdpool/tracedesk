@@ -1,0 +1,7 @@
+{
+  "commits": [
+    {"snapshot": "history/01", "message": "add catalog browsing with pages"},
+    {"snapshot": "history/02", "message": "add search by author"},
+    {"snapshot": "history/03", "message": "refactor: compute page offsets in one place"}
+  ]
+}
