@@ -7,6 +7,11 @@ docs/DAY*.md
 docs/PROGRESS.md
 docs/SWITCH_NOTES.md
 docs/DECISIONS.md
+docs/RESUME.md
+docs/BLOG.md
+docs/SOCIAL.md
+docs/DEMO_SCRIPT.md
+docs/SUBMISSION_CHECKLIST.md
 
 # Untested Switch template (agents were created by hand; see README)
 switch/tracedesk.template.yaml
